@@ -32,3 +32,11 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
+
+// جلب العملاء (بسيط)
+app.get('/api/customers', (req, res) => {
+  const db = require('./db');
+  db.all("SELECT id, name FROM customers", (err, rows) => {
+    res.json(rows);
+  });
+});
