@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>الفواتير</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-4">
+  <h2>الفواتير</h2>
+  <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#invoiceModal">إنشاء فاتورة جديدة</button>
+  <table class="table table-bordered" id="invoicesTable">
+    <thead><tr><th>رقم الفاتورة</th><th>العميل</th><th>التاريخ</th><th>الإجمالي</th><th>تصدير</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- مودال إنشاء الفاتورة -->
+<div class="modal fade" id="invoiceModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5>فاتورة جديدة</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <select id="customer" class="form-control mb-2"><option value="">بدون عميل</option></select>
+        <div id="itemsContainer"></div>
+        <button class="btn btn-secondary btn-sm" onclick="addItemRow()">+ إضافة منتج</button>
+      </div>
+      <div class="modal-footer"><button class="btn btn-success" onclick="createInvoice()">إنشاء الفاتورة</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  let productsList = [];
+
+  async function loadProductsForSelect() {
+    const res = await fetch('/api/products');
+    productsList = await res.json();
+    const select = document.getElementById('customer');
+    // جلب العملاء (نفترض جرّب إضافة endpoint بسيط)
+    const custRes = await fetch('/api/customers'); // سأضيف route سريع في server.js للتجربة
+    if(custRes.ok) {
+      const customers = await custRes.json();
+      select.innerHTML = '<option value="">بدون عميل</option>' + customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+  }
+  function addItemRow() {
+    const container = document.getElementById('itemsContainer');
+    const row = document.createElement('div');
+    row.className = 'row mb-2';
+    row.innerHTML = `
+      <div class="col"><select class="form-control product-select">${productsList.map(p => `<option value="${p.id}">${p.name}</option>`)}</select></div>
+      <div class="col"><input type="number" class="form-control qty" placeholder="الكمية"></div>
+      <div class="col"><button class="btn btn-danger btn-sm" onclick="this.parentElement.parentElement.remove()">حذف</button></div>
+    `;
+    container.appendChild(row);
+  }
+  async function createInvoice() {
+    const customer_id = document.getElementById('customer').value || null;
+    const items = [];
+    document.querySelectorAll('#itemsContainer .row').forEach(row => {
+      const product_id = row.querySelector('.product-select').value;
+      const quantity = parseInt(row.querySelector('.qty').value);
+      if(product_id && quantity) items.push({ product_id, quantity });
+    });
+    if(items.length === 0) return alert('أضف منتج واحد على الأقل');
+    const res = await fetch('/api/invoices', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ customer_id, items })
+    });
+    if(res.ok) {
+      alert('تم إنشاء الفاتورة');
+      bootstrap.Modal.getInstance(document.getElementById('invoiceModal')).hide();
+      loadInvoices();
+    } else {
+      alert('خطأ في الكمية أو المنتج');
+    }
+  }
+  async function loadInvoices() {
+    const res = await fetch('/api/invoices');
+    const invoices = await res.json();
+    const tbody = document.querySelector('#invoicesTable tbody');
+    tbody.innerHTML = '';
+    invoices.forEach(inv => {
+      tbody.innerHTML += `<tr>
+        <td>${inv.invoice_number}</td><td>${inv.customer_name || '-'}</td><td>${inv.date}</td><td>${inv.total}</td>
+        <td><a href="/api/invoices/export/pdf/${inv.id}" class="btn btn-sm btn-info">PDF</a> 
+            <a href="/api/invoices/export/csv/${inv.id}" class="btn btn-sm btn-secondary">CSV</a></td>
+      </tr>`;
+    });
+  }
+  loadProductsForSelect();
+  loadInvoices();
+  // مساعدة: لو مش موجود عملاء, أضف عميل وهمي عبر SQL
+  fetch('/api/customers').catch(()=>{});
+</script>
+</body>
+</html>
